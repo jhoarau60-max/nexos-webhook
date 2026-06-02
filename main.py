@@ -24,7 +24,12 @@ _pending: dict = {}   # message_id → signal data
 async def tg_post(endpoint: str, payload: dict) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.post(f"{TGAPI}/{endpoint}", json=payload)
-        return r.json()
+        result = r.json()
+        if not result.get("ok"):
+            log.error(f"Telegram error [{endpoint}]: {result}")
+        else:
+            log.info(f"Telegram OK [{endpoint}]")
+        return result
 
 
 def build_signal_text(s: dict) -> str:
@@ -86,6 +91,11 @@ async def receive_signal(request: Request):
     if sig_type not in ("BUY", "SELL"):
         return {"ok": True, "skipped": True}
 
+    # Stocker signal avec ID court (max 64 bytes callback_data)
+    import time as _time
+    sig_id = str(int(_time.time() * 1000))[-10:]
+    _pending[sig_id] = body
+
     text = build_signal_text(body)
     payload = {
         "chat_id":      JOETRADE_ID,
@@ -93,8 +103,8 @@ async def receive_signal(request: Request):
         "parse_mode":   "Markdown",
         "reply_markup": {
             "inline_keyboard": [[
-                {"text": "✅ Je prends",    "callback_data": f"take:{json.dumps(body)}"},
-                {"text": "❌ Je passe",     "callback_data": "skip"},
+                {"text": "✅ Je prends", "callback_data": f"take:{sig_id}"},
+                {"text": "❌ Je passe",  "callback_data": "skip"},
             ]]
         }
     }
@@ -103,9 +113,7 @@ async def receive_signal(request: Request):
 
     result = await tg_post("sendMessage", payload)
     msg_id = result.get("result", {}).get("message_id")
-    if msg_id:
-        _pending[msg_id] = body
-    log.info(f"Message envoyé → Joe Trade, msg_id={msg_id}")
+    log.info(f"Message envoyé → Joe Trade, msg_id={msg_id}, sig_id={sig_id}")
     return {"ok": True}
 
 
@@ -132,10 +140,10 @@ async def telegram_callback(request: Request):
         return JSONResponse({"ok": True})
 
     if data.startswith("take:"):
-        try:
-            sig = json.loads(data[5:])
-        except Exception:
-            await tg_post("answerCallbackQuery", {"callback_query_id": cq_id, "text": "Erreur données"})
+        sig_id = data[5:]
+        sig = _pending.get(sig_id)
+        if not sig:
+            await tg_post("answerCallbackQuery", {"callback_query_id": cq_id, "text": "Signal expiré"})
             return JSONResponse({"ok": True})
 
         direction = sig.get("type", "?").upper()
