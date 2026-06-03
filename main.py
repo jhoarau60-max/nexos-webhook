@@ -1,5 +1,5 @@
 """
-NexosTrade Webhook — reçoit signaux TradingView → poste dans Joe Trade avec boutons Telegram
+NexosTrade Webhook v2 — reçoit signaux TradingView → poste dans Joe Trade avec boutons Telegram
 """
 import os, json, logging
 from fastapi import FastAPI, Request, HTTPException
@@ -37,8 +37,6 @@ def build_signal_text(s: dict) -> str:
     symbol    = s.get("symbol", "?")
     entry     = s.get("entry",  "?")
     tp1       = s.get("tp1",    "?")
-    tp2       = s.get("tp2",    "?")
-    tp3       = s.get("tp3",    "?")
     sl        = s.get("sl",     "?")
     tf        = s.get("tf",     "5m")
     em        = "📈" if direction == "BUY" else "📉"
@@ -48,9 +46,7 @@ def build_signal_text(s: dict) -> str:
         f"{em} *SIGNAL NEXOSTRADE — {direction}*\n"
         f"{col} *{symbol}* | TF : `{tf}`\n\n"
         f"💠 *Entrée :* `{entry}`\n"
-        f"🎯 *TP1 :* `{tp1}`\n"
-        f"🎯 *TP2 :* `{tp2}`\n"
-        f"🎯 *TP3 :* `{tp3}`\n"
+        f"🎯 *TP :* `{tp1}`\n"
         f"🛑 *SL :*  `{sl}`\n\n"
         f"_John Hoarau — NexosTrade_"
     )
